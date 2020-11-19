@@ -8,6 +8,7 @@ using SimioAPI;
 using SimioAPI.Extensions;
 
 using OfficeOpenXml;
+using System.Linq;
 
 namespace ExcelReadWriteEPPlus
 {
@@ -28,7 +29,7 @@ namespace ExcelReadWriteEPPlus
         /// </summary>
         public string Description
         {
-            get { return "Used with ExcelReadEPPlus and ExcelWriteEPPlus steps.\nThe ExcelConnectEPPlus element may be used in conjunction with the user defined Excel Read and Excel Write steps to read from and write to an Excel spreadsheet."; }
+            get { return "Used with ExcelReadEPPlus and ExcelWriteEPPlus steps.\nThe ExcelConnectEPPlus element may be used in conjunction with the user defined EPPlus Excel Read and Excel Write steps to read from and write to an Excel spreadsheet."; }
         }
 
         /// <summary>
@@ -98,10 +99,10 @@ namespace ExcelReadWriteEPPlus
 
             _data = data;
 
-            IPropertyReader excelWorkbookProp = _data.Properties.GetProperty("ExcelWorkbook");
+            IPropertyReader prExcelWorkbook = _data.Properties.GetProperty("ExcelWorkbook");
 
             // get filename             
-            string fileName = excelWorkbookProp.GetStringValue(_data.ExecutionContext);
+            string fileName = prExcelWorkbook.GetStringValue(_data.ExecutionContext);
             _package = new ExcelPackage(new FileInfo(fileName));
 
             if (String.IsNullOrEmpty(fileName) == false)
@@ -216,7 +217,7 @@ namespace ExcelReadWriteEPPlus
         }
 
         /// <summary>
-        /// Find the given worksheet
+        /// Find the given worksheet/row/column and return the result as string
         /// </summary>
         /// <param name="workSheetName"></param>
         /// <param name="rowNumber"></param>
@@ -232,28 +233,20 @@ namespace ExcelReadWriteEPPlus
 
             ExcelWorksheet sheet = null;
 
-            foreach (ExcelWorksheet sh in _sheets)
-            {
-                if (sh.Name == workSheetName)
-                {
-                    sheet = sh;
-                    break;
-                }
-            }
-
-            if (sheet == null)
+            // See if this sheet is already in our cache
+            sheet = _sheets.SingleOrDefault(rr => rr.Name == workSheetName);
+            if ( sheet == null )
             {
                 sheet = ReadSheet(_readerExcelFileName, workSheetName);
                 _sheets.Add(sheet);
             }
 
-            ExcelRow row = sheet.Row(rowNumber-1); //. .Rows[rowNumber - 1][columnNumber - 1];
-            var cell = sheet.GetValue(rowNumber - 1, columnNumber - 1);
-
+            ExcelRow row = sheet.Row(rowNumber); 
+            var cell = sheet.GetValue(rowNumber, columnNumber);
 
             if (cell != null)
             {
-                
+                // Look at the type. Here is where you can do custom interpretation
                 var type = cell.GetType();
                 switch (type.Name)
                 {
@@ -261,6 +254,8 @@ namespace ExcelReadWriteEPPlus
                     case "Decimal":
                     case "Boolean":
                     case "DateTime":
+                    case "Double":
+                        stringResult = cell.ToString();
                         break;
 
                     default:
@@ -286,26 +281,17 @@ namespace ExcelReadWriteEPPlus
         /// <param name="writeDateTimeValue"></param>
         /// <param name="writeStringValue"></param>
         /// <param name="context"></param>
-        public void WriteResults(String workSheet, Int32 rowNumber, Int32 columnNumber, Double writeDoubleValue, DateTime writeDateTimeValue, String writeStringValue, IExecutionContext context)
+        public void WriteResults(String workSheetName, Int32 rowNumber, Int32 columnNumber, Double writeDoubleValue, DateTime writeDateTimeValue, String writeStringValue, IExecutionContext context)
         {
             _bWroteToWorkbook = true;
 
             string stringResult = String.Empty;
 
-            ExcelWorksheet sheet = null;
-
-            foreach (ExcelWorksheet sh in _sheets)
-            {
-                if (sh.Name == workSheet)
-                {
-                    sheet = sh;
-                    break;
-                }
-            }
-
+            // See if this sheet is already in our cache
+            ExcelWorksheet sheet = _sheets.SingleOrDefault(rr => rr.Name == workSheetName);
             if (sheet == null)
             {
-                sheet = ReadSheet(_readerExcelFileName, workSheet);
+                sheet = ReadSheet(_readerExcelFileName, workSheetName);
                 _sheets.Add(sheet);
             }
 
@@ -315,11 +301,11 @@ namespace ExcelReadWriteEPPlus
                 sheet.InsertRow(1, 1);
             }
 
-            var c = sheet.Cells[rowNumber, columnNumber];
+            var cc = sheet.Cells[rowNumber, columnNumber];
 
             if (writeDoubleValue != System.Double.MinValue)
             {
-                c.Value = writeDoubleValue;
+                cc.Value = writeDoubleValue;
             }
             else if (writeDateTimeValue != System.DateTime.MinValue)
             {
@@ -332,11 +318,11 @@ namespace ExcelReadWriteEPPlus
                     //  the ToString() will simply strip off any sub-second values.
                     dt = dt.AddSeconds(1.0);
                 }
-                c.Value = dt;
+                cc.Value = dt;
             }
             else
             {
-                c.Value = writeStringValue;
+                cc.Value = writeStringValue;
             }
         }
 

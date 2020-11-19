@@ -95,20 +95,21 @@ namespace ExcelReadWriteEPPlus
 
     class ExcelReadStep : IStep
     {
-        IPropertyReaders _props;
-        IPropertyReader _worksheetProp;
-        IPropertyReader _rowProp;
-        IPropertyReader _startingColumnProp;
-        IElementProperty _ExcelconnectElementProp;
-        IRepeatingPropertyReader _states;
+        IPropertyReaders _propReaders;
+        IPropertyReader prWorksheet;
+        IPropertyReader prRow;
+        IPropertyReader prStartingColumn;
+        IElementProperty prExcelconnectElement;
+        IRepeatingPropertyReader rprStates;
+
         public ExcelReadStep(IPropertyReaders properties)
         {
-            _props = properties;
-            _worksheetProp = _props.GetProperty("Worksheet");
-            _rowProp = _props.GetProperty("Row");
-            _startingColumnProp = _props.GetProperty("StartingColumn");
-            _ExcelconnectElementProp = (IElementProperty)_props.GetProperty("ExcelConnect");
-            _states = (IRepeatingPropertyReader)_props.GetProperty("States");
+            _propReaders = properties;
+            prWorksheet = _propReaders.GetProperty("Worksheet");
+            prRow = _propReaders.GetProperty("Row");
+            prStartingColumn = _propReaders.GetProperty("StartingColumn");
+            prExcelconnectElement = (IElementProperty)_propReaders.GetProperty("ExcelConnectEPPlus");
+            rprStates = (IRepeatingPropertyReader)_propReaders.GetProperty("States");
         }
 
         #region IStep Members
@@ -119,24 +120,24 @@ namespace ExcelReadWriteEPPlus
         public ExitType Execute(IStepExecutionContext context)
         {
             // Get Excel data
-            ExcelConnectElementEPPlus Excelconnect = (ExcelConnectElementEPPlus)_ExcelconnectElementProp.GetElement(context);
+            ExcelConnectElementEPPlus Excelconnect = (ExcelConnectElementEPPlus)prExcelconnectElement.GetElement(context);
             if (Excelconnect == null)
             {
                 context.ExecutionInformation.ReportError("ExcelConnectEPPlus element is null.  Makes sure ExcelWorkbook is defined correctly.");
             }
-            String worksheetString = _worksheetProp.GetStringValue(context);
-            Int32 rowInt = (Int32)_rowProp.GetDoubleValue(context);
-            Int32 startingColumnInt = Convert.ToInt32(_startingColumnProp.GetDoubleValue(context));           
+            String worksheetString = prWorksheet.GetStringValue(context);
+            Int32 rowInt = (Int32)prRow.GetDoubleValue(context);
+            Int32 startingColumnInt = Convert.ToInt32(prStartingColumn.GetDoubleValue(context));           
 
             int numReadIn = 0;
             int numReadFailures = 0;
-            for (int i = 0; i < _states.GetCount(context); i++)
+            for (int ii = 0; ii < rprStates.GetCount(context); ii++)
             {
                 // Tokenize the input
-                string resultsString = Excelconnect.ReadResults(worksheetString, rowInt, startingColumnInt + i, context);
+                string resultsString = Excelconnect.ReadResults(worksheetString, rowInt, startingColumnInt + ii, context);
 
                 // The thing returned from GetRow is IDisposable, so we use the using() pattern here
-                using (IPropertyReaders row = _states.GetRow(i, context))
+                using (IPropertyReaders row = rprStates.GetRow(ii, context))
                 {
                     // Get the state property out of the i-th tuple of the repeat group
                     IStateProperty stateprop = (IStateProperty)row.GetProperty("State");
@@ -156,7 +157,7 @@ namespace ExcelReadWriteEPPlus
                 }
             }
 
-            string worksheetName = (_worksheetProp as IPropertyReader).GetStringValue(context);
+            string worksheetName = prWorksheet.GetStringValue(context);
             context.ExecutionInformation.TraceInformation($"Read from row={rowInt} worksheet={worksheetName} into {numReadIn} state columns. {numReadFailures} read failures");
 
             // We are done reading, have the token proceed out of the primary exit
